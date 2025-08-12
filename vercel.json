@@ -1,9 +1,7 @@
 {
-  "functions": {
-    "index.html": {
-      "maxDuration": 10
-    }
-  },
+  "buildCommand": "echo 'No build needed for static site'",
+  "outputDirectory": ".",
+  "framework": null,
   "headers": [
     {
       "source": "/(.*)",
