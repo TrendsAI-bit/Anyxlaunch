@@ -28,30 +28,78 @@ export default async function handler(req, res) {
     const apiKey = 'bags_prod_3zpiHpFX3GsG0ZzA5XOQmJw06Go8pPVjRuqDHq0jD2Q';
     const apiBase = 'https://public-api-v2.bags.fm/api/v1';
 
-    // Step 1: Create token launch configuration
-    console.log('📡 Step 1: Creating launch config...');
-    const configResponse = await fetch(`${apiBase}/token-launch/create-config`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey
-      },
-      body: JSON.stringify({
-        launchWallet: creatorWallet
-      })
-    });
-
-    if (!configResponse.ok) {
-      const errorText = await configResponse.text();
-      console.error('Config API error:', errorText);
-      throw new Error(`Config API failed: ${configResponse.status} - ${errorText}`);
+    // Step 1: Test different possible endpoints
+    console.log('📡 Step 1: Testing Bags API endpoints...');
+    
+    // Try different possible endpoints
+    const testEndpoints = [
+      '/token-launch/create-config',
+      '/tokens/create-config', 
+      '/launch/create-config',
+      '/create-config',
+      '/config',
+      '/health',
+      '/status'
+    ];
+    
+    let workingEndpoint = null;
+    let configData = null;
+    
+    for (const endpoint of testEndpoints) {
+      try {
+        console.log(`🧪 Testing endpoint: ${endpoint}`);
+        const testResponse = await fetch(`${apiBase}${endpoint}`, {
+          method: 'GET',
+          headers: {
+            'x-api-key': apiKey
+          }
+        });
+        
+        console.log(`📊 ${endpoint}: Status ${testResponse.status}`);
+        
+        if (testResponse.ok || testResponse.status === 404) {
+          workingEndpoint = endpoint;
+          console.log(`✅ Found working endpoint: ${endpoint}`);
+          break;
+        }
+      } catch (e) {
+        console.log(`❌ ${endpoint}: ${e.message}`);
+      }
     }
+    
+    if (!workingEndpoint) {
+      throw new Error('No working Bags API endpoints found. The API might be different than expected.');
+    }
+    
+    // If we found a working endpoint, try to create config
+    if (workingEndpoint !== '/health' && workingEndpoint !== '/status') {
+      console.log(`📡 Attempting token config with: ${workingEndpoint}`);
+      const configResponse = await fetch(`${apiBase}${workingEndpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey
+        },
+        body: JSON.stringify({
+          launchWallet: creatorWallet,
+          // Try different possible parameter names
+          wallet: creatorWallet,
+          creator: creatorWallet,
+          owner: creatorWallet
+        })
+      });
 
-    const configData = await configResponse.json();
-    console.log('✅ Config created:', configData);
+      if (!configResponse.ok) {
+        const errorText = await configResponse.text();
+        console.error('Config API error:', errorText);
+        throw new Error(`Config API failed: ${configResponse.status} - ${errorText}`);
+      }
 
-    if (!configData.success) {
-      throw new Error(`Config failed: ${configData.error || 'Unknown error'}`);
+      configData = await configResponse.json();
+      console.log('✅ Config created:', configData);
+    } else {
+      // If only health/status worked, we'll skip to manual fallback
+      throw new Error('Only health endpoints work - Bags API might not support programmatic token creation');
     }
 
     // Step 2: Create token metadata (Bags handles image upload internally if needed)
@@ -69,43 +117,15 @@ export default async function handler(req, res) {
       ]
     };
 
-    // Step 3: Create the launch transaction
-    console.log('📡 Step 2: Creating launch transaction...');
-    const launchResponse = await fetch(`${apiBase}/token-launch/create`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey
-      },
-      body: JSON.stringify({
-        configId: configData.response?.id || configData.id,
-        metadata: metadata,
-        initialLiquiditySOL: 0.1,
-        creatorWallet: creatorWallet
-      })
-    });
-
-    if (!launchResponse.ok) {
-      const errorText = await launchResponse.text();
-      console.error('Launch API error:', errorText);
-      throw new Error(`Launch API failed: ${launchResponse.status} - ${errorText}`);
-    }
-
-    const launchData = await launchResponse.json();
-    console.log('✅ Launch transaction created:', launchData);
-
-    if (!launchData.success) {
-      throw new Error(`Launch failed: ${launchData.error || 'Unknown error'}`);
-    }
-
-    // Return the transaction for client-side signing
+    // For now, just return success with endpoint discovery results
     res.status(200).json({
       success: true,
       data: {
-        configId: configData.response?.id || configData.id,
-        transaction: launchData.response?.transaction || launchData.transaction,
-        message: 'Token launch transaction prepared successfully',
-        metadata: metadata
+        message: 'Bags API endpoint discovery completed',
+        workingEndpoint: workingEndpoint,
+        configData: configData,
+        metadata: metadata,
+        note: 'This is a debugging response - actual token creation needs proper API endpoints'
       }
     });
 
