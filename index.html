@@ -144,6 +144,37 @@
     
     // Debug mode - set to true for detailed logging
     const DEBUG_MODE = true;
+    
+    // CORS Proxy helper function
+    async function proxyFetch(url, options = {}) {
+      const proxyUrl = '/api/proxy';
+      const proxyOptions = {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          url: url,
+          method: options.method || 'GET',
+          headers: options.headers || {},
+          body: options.body
+        })
+      };
+      
+      const response = await fetch(proxyUrl, proxyOptions);
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(`Proxy error: ${result.error}`);
+      }
+      
+      return {
+        ok: result.status >= 200 && result.status < 300,
+        status: result.status,
+        json: () => Promise.resolve(result.data),
+        text: () => Promise.resolve(typeof result.data === 'string' ? result.data : JSON.stringify(result.data))
+      };
+    }
 
     // Robust logo fallback: try several common paths/names
     (function resolveLogo(){
@@ -186,23 +217,22 @@
     let connectedPubkey = null;
 
     async function updateBalance(pubkey) {
-      const RPCS = [
-        'https://rpc.ankr.com/solana',
-        'https://solana-mainnet.g.alchemy.com/v2/demo',
-        'https://api.mainnet-beta.solana.com'
-      ];
-      for (const rpc of RPCS) {
-        try {
-          const connection = new solanaWeb3.Connection(rpc, 'confirmed');
-          const balanceLamports = await connection.getBalance(new solanaWeb3.PublicKey(pubkey));
-          const sol = (balanceLamports / 1_000_000_000).toFixed(4);
-          walletInfo.textContent = pubkey.slice(0, 4) + '…' + pubkey.slice(-4) + ' • ' + sol + ' SOL';
-          return;
-        } catch (e) {
-          console.warn('RPC failed for', rpc, e);
-        }
+      try {
+        // Use Helius API for reliable balance fetching
+        const heliusRpc = 'https://mainnet.helius-rpc.com/?api-key=bc40e3e4-98df-4d4f-99cf-dd22cc091955';
+        const connection = new solanaWeb3.Connection(heliusRpc, 'confirmed');
+        
+        console.log('🔄 Fetching balance for:', pubkey);
+        const balanceLamports = await connection.getBalance(new solanaWeb3.PublicKey(pubkey));
+        const sol = (balanceLamports / 1_000_000_000).toFixed(4);
+        
+        walletInfo.textContent = pubkey.slice(0, 4) + '…' + pubkey.slice(-4) + ' • ' + sol + ' SOL';
+        console.log('✅ Balance updated:', sol, 'SOL');
+        
+      } catch (e) {
+        console.error('❌ Balance fetch failed:', e);
+        walletInfo.textContent = pubkey.slice(0, 4) + '…' + pubkey.slice(-4) + ' • balance unavailable';
       }
-      walletInfo.textContent = pubkey.slice(0, 4) + '…' + pubkey.slice(-4) + ' • balance unavailable';
     }
 
     async function connectPhantom() {
@@ -244,25 +274,24 @@
       console.log('📍 Current URL:', window.location.href);
       console.log('🌐 Protocol:', window.location.protocol);
       
-      // Test 1: Bags API
+      // Test 1: Bags API via CORS proxy
       try {
-        const healthResponse = await fetch('https://public-api-v2.bags.fm/api/v1/health', {
+        console.log('🧪 Testing Bags API via CORS proxy...');
+        const healthResponse = await proxyFetch('https://public-api-v2.bags.fm/api/v1/health', {
           method: 'GET',
           headers: {
             'x-api-key': 'bags_prod_3zpiHpFX3GsG0ZzA5XOQmJw06Go8pPVjRuqDHq0jD2Q'
           }
         });
         
-        const healthText = await healthResponse.text();
-        
-        if (healthText.includes('<!DOCTYPE html>')) {
-          console.error('❌ Bags API: CORS blocked or endpoint doesn\'t exist');
-          console.log('💡 Will use fallback method (open bags.fm manually)');
+        if (healthResponse.ok) {
+          console.log('✅ Bags API: Accessible via CORS proxy!');
         } else {
-          console.log('✅ Bags API: Response received (may be error but not CORS)');
+          console.warn('⚠️ Bags API: Proxy worked but API returned error:', healthResponse.status);
         }
       } catch (e) {
-        console.error('❌ Bags API: Network error -', e.message);
+        console.error('❌ Bags API via proxy failed:', e.message);
+        console.log('💡 Will use fallback method (open bags.fm manually)');
       }
       
       // Test 2: PumpPortal API
@@ -372,8 +401,8 @@
         const signature = await provider.signAndSendTransaction(transaction);
         
         submit.textContent = 'Confirming...';
-        // Wait for confirmation
-        const connection = new solanaWeb3.Connection('https://rpc.ankr.com/solana', 'confirmed');
+        // Wait for confirmation using Helius
+        const connection = new solanaWeb3.Connection('https://mainnet.helius-rpc.com/?api-key=bc40e3e4-98df-4d4f-99cf-dd22cc091955', 'confirmed');
         await connection.confirmTransaction(signature, 'confirmed');
         
         alert(`🎉 Token launched successfully!\n\nTransaction: ${signature}\n\nView on Solscan: https://solscan.io/tx/${signature}`);
@@ -424,43 +453,96 @@
       return `https://gateway.pinata.cloud/ipfs/${data.IpfsHash}`;
     }
 
-    // Bags.fm Integration - Alternative approach using direct contract interaction
+    // Bags.fm Integration - Using CORS proxy
     async function createOnBags(tokenName, symbol, description, imageUri) {
-      const connection = new solanaWeb3.Connection('https://rpc.ankr.com/solana', 'confirmed');
+      const connection = new solanaWeb3.Connection('https://mainnet.helius-rpc.com/?api-key=bc40e3e4-98df-4d4f-99cf-dd22cc091955', 'confirmed');
       
       try {
-        if (DEBUG_MODE) console.log('🔄 Bags.fm integration - using alternative method...', { tokenName, symbol, description, imageUri });
+        if (DEBUG_MODE) console.log('🔄 Bags.fm integration via CORS proxy...', { tokenName, symbol, description, imageUri });
         
-        // Since the public API endpoints might not be available or have CORS issues,
-        // let's try a different approach - opening Bags.fm with pre-filled data
-        
-        // Method 1: Try a simple API call first
+        // Method 1: Try using our CORS proxy for the real API
         try {
-          const testResponse = await fetch('https://cors-anywhere.herokuapp.com/https://public-api-v2.bags.fm/api/v1/health', {
-            method: 'GET',
+          // Step 1: Create token launch configuration
+          console.log('📡 Creating Bags token launch config via proxy...');
+          const configResponse = await proxyFetch('https://public-api-v2.bags.fm/api/v1/token-launch/create-config', {
+            method: 'POST',
             headers: {
+              'Content-Type': 'application/json',
               'x-api-key': 'bags_prod_3zpiHpFX3GsG0ZzA5XOQmJw06Go8pPVjRuqDHq0jD2Q'
+            },
+            body: {
+              launchWallet: connectedPubkey
             }
           });
           
-          if (testResponse.ok) {
-            console.log('✅ Bags API accessible via CORS proxy');
-            // If this works, we can proceed with the full API flow
+          if (!configResponse.ok) {
+            throw new Error(`Config API failed: ${configResponse.status}`);
           }
-        } catch (e) {
-          console.warn('CORS proxy also failed:', e);
-        }
-        
-        // Method 2: Open Bags.fm directly for manual creation
-        const bagsUrl = `https://bags.fm/create?name=${encodeURIComponent(tokenName)}&symbol=${encodeURIComponent(symbol)}&description=${encodeURIComponent(description)}&image=${encodeURIComponent(imageUri)}`;
-        
-        const userChoice = confirm(`Bags.fm API is not accessible due to CORS restrictions.\n\nWould you like to:\n\n✅ YES - Open Bags.fm to create manually (recommended)\n❌ NO - Try Pump.fun instead`);
-        
-        if (userChoice) {
-          window.open(bagsUrl, '_blank');
-          throw new Error('Opening Bags.fm for manual token creation. Your data has been pre-filled.');
-        } else {
-          throw new Error('Bags.fm API not accessible. Please try Pump.fun instead.');
+          
+          const configData = await configResponse.json();
+          console.log('✅ Config response:', configData);
+          
+          if (!configData.success) {
+            throw new Error(`Config failed: ${configData.error}`);
+          }
+          
+          // Step 2: Create token launch transaction
+          console.log('📡 Creating Bags launch transaction via proxy...');
+          const launchResponse = await proxyFetch('https://public-api-v2.bags.fm/api/v1/token-launch/create', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': 'bags_prod_3zpiHpFX3GsG0ZzA5XOQmJw06Go8pPVjRuqDHq0jD2Q'
+            },
+            body: {
+              configId: configData.response.id,
+              metadata: {
+                name: tokenName,
+                symbol: symbol,
+                description: description,
+                image: imageUri,
+                external_url: "https://anyxlaunch.vercel.app"
+              },
+              initialLiquiditySOL: 0.1,
+              creatorWallet: connectedPubkey
+            }
+          });
+          
+          if (!launchResponse.ok) {
+            throw new Error(`Launch API failed: ${launchResponse.status}`);
+          }
+          
+          const launchData = await launchResponse.json();
+          console.log('✅ Launch response:', launchData);
+          
+          if (!launchData.success) {
+            throw new Error(`Launch failed: ${launchData.error}`);
+          }
+          
+          // Step 3: Return transaction for signing
+          if (launchData.response.transaction) {
+            const transaction = solanaWeb3.Transaction.from(
+              Buffer.from(launchData.response.transaction, 'base64')
+            );
+            return transaction;
+          } else {
+            throw new Error('No transaction returned from Bags API');
+          }
+          
+        } catch (apiError) {
+          console.warn('❌ Bags API via proxy failed:', apiError.message);
+          
+          // Method 2: Fallback to manual creation
+          const bagsUrl = `https://bags.fm/create?name=${encodeURIComponent(tokenName)}&symbol=${encodeURIComponent(symbol)}&description=${encodeURIComponent(description)}&image=${encodeURIComponent(imageUri)}`;
+          
+          const userChoice = confirm(`Bags.fm API failed: ${apiError.message}\n\nWould you like to:\n\n✅ YES - Open Bags.fm to create manually\n❌ NO - Try Pump.fun instead`);
+          
+          if (userChoice) {
+            window.open(bagsUrl, '_blank');
+            throw new Error('Opening Bags.fm for manual token creation. Your data has been pre-filled.');
+          } else {
+            throw new Error('Bags.fm API failed. Please try Pump.fun instead.');
+          }
         }
         
       } catch (error) {
