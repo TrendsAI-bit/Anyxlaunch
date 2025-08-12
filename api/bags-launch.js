@@ -1,4 +1,6 @@
-// Vercel serverless function for Bags.fm token launching using direct API calls
+// Vercel serverless function for Bags.fm token launching using official SDK
+import { BagsSDK } from '@bagsfm/bags-sdk';
+
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -23,83 +25,61 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log('🚀 Creating Bags token via API:', { tokenName, symbol, creatorWallet });
+    console.log('🚀 Creating Bags token using official SDK:', { tokenName, symbol, creatorWallet });
 
-    const apiKey = 'bags_prod_3zpiHpFX3GsG0ZzA5XOQmJw06Go8pPVjRuqDHq0jD2Q';
-    const apiBase = 'https://public-api-v2.bags.fm/api/v1';
+    // Initialize Bags SDK properly following the documentation
+    const bags = new BagsSDK({
+      apiKey: 'bags_prod_3zpiHpFX3GsG0ZzA5XOQmJw06Go8pPVjRuqDHq0jD2Q',
+      rpcUrl: 'https://mainnet.helius-rpc.com/?api-key=bc40e3e4-98df-4d4f-99cf-dd22cc091955'
+    });
 
-    // Step 1: Test different possible endpoints
-    console.log('📡 Step 1: Testing Bags API endpoints...');
+    console.log('✅ Bags SDK initialized');
+
+    // Use the SDK methods (need to check what methods are actually available)
+    console.log('📡 Available SDK methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(bags)));
     
-    // Try different possible endpoints
-    const testEndpoints = [
-      '/token-launch/create-config',
-      '/tokens/create-config', 
-      '/launch/create-config',
-      '/create-config',
-      '/config',
-      '/health',
-      '/status'
-    ];
-    
-    let workingEndpoint = null;
-    let configData = null;
-    
-    for (const endpoint of testEndpoints) {
-      try {
-        console.log(`🧪 Testing endpoint: ${endpoint}`);
-        const testResponse = await fetch(`${apiBase}${endpoint}`, {
-          method: 'GET',
-          headers: {
-            'x-api-key': apiKey
-          }
+    // Try to create a token launch - let's see what methods exist
+    let result;
+    try {
+      // Try different possible method names
+      if (typeof bags.launchToken === 'function') {
+        console.log('🎯 Using launchToken method');
+        result = await bags.launchToken({
+          name: tokenName,
+          symbol: symbol,
+          description: description,
+          image: imageUri,
+          creator: creatorWallet
         });
-        
-        console.log(`📊 ${endpoint}: Status ${testResponse.status}`);
-        
-        if (testResponse.ok || testResponse.status === 404) {
-          workingEndpoint = endpoint;
-          console.log(`✅ Found working endpoint: ${endpoint}`);
-          break;
-        }
-      } catch (e) {
-        console.log(`❌ ${endpoint}: ${e.message}`);
+      } else if (typeof bags.createToken === 'function') {
+        console.log('🎯 Using createToken method');
+        result = await bags.createToken({
+          name: tokenName,
+          symbol: symbol,
+          description: description,
+          image: imageUri,
+          creator: creatorWallet
+        });
+      } else if (typeof bags.launch === 'function') {
+        console.log('🎯 Using launch method');
+        result = await bags.launch({
+          name: tokenName,
+          symbol: symbol,
+          description: description,
+          image: imageUri,
+          creator: creatorWallet
+        });
+      } else {
+        console.log('📋 Available methods:', Object.getOwnPropertyNames(bags));
+        console.log('📋 Available prototype methods:', Object.getOwnPropertyNames(Object.getPrototypeOf(bags)));
+        throw new Error('No suitable token creation method found in Bags SDK');
       }
-    }
-    
-    if (!workingEndpoint) {
-      throw new Error('No working Bags API endpoints found. The API might be different than expected.');
-    }
-    
-    // If we found a working endpoint, try to create config
-    if (workingEndpoint !== '/health' && workingEndpoint !== '/status') {
-      console.log(`📡 Attempting token config with: ${workingEndpoint}`);
-      const configResponse = await fetch(`${apiBase}${workingEndpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey
-        },
-        body: JSON.stringify({
-          launchWallet: creatorWallet,
-          // Try different possible parameter names
-          wallet: creatorWallet,
-          creator: creatorWallet,
-          owner: creatorWallet
-        })
-      });
-
-      if (!configResponse.ok) {
-        const errorText = await configResponse.text();
-        console.error('Config API error:', errorText);
-        throw new Error(`Config API failed: ${configResponse.status} - ${errorText}`);
-      }
-
-      configData = await configResponse.json();
-      console.log('✅ Config created:', configData);
-    } else {
-      // If only health/status worked, we'll skip to manual fallback
-      throw new Error('Only health endpoints work - Bags API might not support programmatic token creation');
+      
+      console.log('✅ SDK result:', result);
+      
+    } catch (sdkError) {
+      console.error('❌ SDK method error:', sdkError);
+      throw new Error(`Bags SDK error: ${sdkError.message}`);
     }
 
     // Step 2: Create token metadata (Bags handles image upload internally if needed)
@@ -117,15 +97,14 @@ export default async function handler(req, res) {
       ]
     };
 
-    // For now, just return success with endpoint discovery results
+    // Return the SDK result
     res.status(200).json({
       success: true,
       data: {
-        message: 'Bags API endpoint discovery completed',
-        workingEndpoint: workingEndpoint,
-        configData: configData,
+        message: 'Bags SDK token creation completed',
+        result: result,
         metadata: metadata,
-        note: 'This is a debugging response - actual token creation needs proper API endpoints'
+        transaction: result?.transaction || null
       }
     });
 
