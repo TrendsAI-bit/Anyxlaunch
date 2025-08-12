@@ -8,6 +8,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/index.ts"
   },
   "dependencies": {
+    "@bagsfm/bags-sdk": "^1.0.3",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
     "twitter-api-v2": "^1.16.0",
@@ -18,5 +19,3 @@
     "typescript": "^5.5.4"
   }
 }
-
-

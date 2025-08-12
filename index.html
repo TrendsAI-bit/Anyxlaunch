@@ -274,49 +274,37 @@
       console.log('📍 Current URL:', window.location.href);
       console.log('🌐 Protocol:', window.location.protocol);
       
-      // Test 1: Bags API - Try multiple endpoints
+      // Test 1: Bags SDK via serverless function
       try {
-        console.log('🧪 Testing Bags API endpoints...');
+        console.log('🧪 Testing Bags SDK serverless function...');
         
-        // Test direct API call first (should work if CORS is properly configured)
-        try {
-          const directResponse = await fetch('https://public-api-v2.bags.fm/api/v1/endpoint', {
-            method: 'GET',
-            headers: {
-              'x-api-key': 'bags_prod_3zpiHpFX3GsG0ZzA5XOQmJw06Go8pPVjRuqDHq0jD2Q'
-            }
-          });
-          
-          if (directResponse.ok || directResponse.status === 404) {
-            console.log('✅ Bags API: Direct access works! No CORS issues.');
-          } else {
-            console.log('⚠️ Bags API Direct: Status', directResponse.status);
-          }
-        } catch (directError) {
-          console.log('❌ Bags API Direct failed:', directError.message);
-          
-          // Fallback to proxy
-          try {
-            console.log('🔄 Trying Bags API via CORS proxy...');
-            const proxyResponse = await proxyFetch('https://public-api-v2.bags.fm/api/v1/endpoint', {
-              method: 'GET',
-              headers: {
-                'x-api-key': 'bags_prod_3zpiHpFX3GsG0ZzA5XOQmJw06Go8pPVjRuqDHq0jD2Q'
-              }
-            });
-            
-            if (proxyResponse.ok || proxyResponse.status === 404) {
-              console.log('✅ Bags API: Accessible via CORS proxy!');
-            } else {
-              console.warn('⚠️ Bags API Proxy: Status', proxyResponse.status);
-            }
-          } catch (proxyError) {
-            console.error('❌ Bags API via proxy also failed:', proxyError.message);
-          }
+        const testResponse = await fetch('/api/bags-launch', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            tokenName: 'Test Token',
+            symbol: 'TEST',
+            description: 'API test token',
+            imageUri: 'https://via.placeholder.com/512',
+            creatorWallet: 'DummyWalletForTesting123456789' // This will fail but test the endpoint
+          })
+        });
+        
+        // We expect this to fail since it's a test, but we want to see if the endpoint responds
+        if (testResponse.status === 400 || testResponse.status === 500) {
+          const errorData = await testResponse.json();
+          console.log('✅ Bags SDK endpoint: Accessible (got expected validation error)');
+          console.log('📋 Error details:', errorData.error);
+        } else if (testResponse.ok) {
+          console.log('✅ Bags SDK endpoint: Working perfectly!');
+        } else {
+          console.warn('⚠️ Bags SDK endpoint: Unexpected status', testResponse.status);
         }
         
       } catch (e) {
-        console.error('❌ Bags API testing failed:', e.message);
+        console.error('❌ Bags SDK endpoint failed:', e.message);
       }
       
       // Test 2: PumpPortal API
@@ -478,116 +466,62 @@
       return `https://gateway.pinata.cloud/ipfs/${data.IpfsHash}`;
     }
 
-    // Bags.fm Integration - Try direct API first, then proxy
+    // Bags.fm Integration - Using official SDK via serverless function
     async function createOnBags(tokenName, symbol, description, imageUri) {
-      const connection = new solanaWeb3.Connection('https://mainnet.helius-rpc.com/?api-key=bc40e3e4-98df-4d4f-99cf-dd22cc091955', 'confirmed');
-      
       try {
-        if (DEBUG_MODE) console.log('🔄 Bags.fm integration starting...', { tokenName, symbol, description, imageUri });
+        if (DEBUG_MODE) console.log('🔄 Bags.fm integration using official SDK...', { tokenName, symbol, description, imageUri });
         
-        // Helper function to try API call (direct or via proxy)
-        const tryBagsAPI = async (useDirect = true) => {
-          const fetchFn = useDirect ? fetch : proxyFetch;
-          const logPrefix = useDirect ? '🌐 Direct' : '📡 Proxy';
-          
-          console.log(`${logPrefix}: Creating Bags token launch config...`);
-          
-          const configResponse = await fetchFn('https://public-api-v2.bags.fm/api/v1/token-launch/create-config', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': 'bags_prod_3zpiHpFX3GsG0ZzA5XOQmJw06Go8pPVjRuqDHq0jD2Q'
-            },
-            body: useDirect ? JSON.stringify({ launchWallet: connectedPubkey }) : { launchWallet: connectedPubkey }
-          });
-          
-          if (!configResponse.ok) {
-            throw new Error(`Config API failed: ${configResponse.status}`);
-          }
-          
-          const configData = await configResponse.json();
-          console.log(`✅ ${logPrefix} Config response:`, configData);
-          
-          if (!configData.success) {
-            throw new Error(`Config failed: ${configData.error || 'Unknown error'}`);
-          }
-          
-          console.log(`${logPrefix}: Creating Bags launch transaction...`);
-          
-          const launchPayload = {
-            configId: configData.response?.id || configData.id,
-            metadata: {
-              name: tokenName,
-              symbol: symbol,
-              description: description,
-              image: imageUri,
-              external_url: "https://anyxlaunch.vercel.app"
-            },
-            initialLiquiditySOL: 0.1,
+        console.log('📡 Calling Bags SDK serverless function...');
+        
+        const response = await fetch('/api/bags-launch', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            tokenName: tokenName,
+            symbol: symbol,
+            description: description,
+            imageUri: imageUri,
             creatorWallet: connectedPubkey
-          };
-          
-          const launchResponse = await fetchFn('https://public-api-v2.bags.fm/api/v1/token-launch/create', {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              'x-api-key': 'bags_prod_3zpiHpFX3GsG0ZzA5XOQmJw06Go8pPVjRuqDHq0jD2Q'
-            },
-            body: useDirect ? JSON.stringify(launchPayload) : launchPayload
-          });
-          
-          if (!launchResponse.ok) {
-            const errorText = await launchResponse.text();
-            throw new Error(`Launch API failed: ${launchResponse.status} - ${errorText}`);
-          }
-          
-          const launchData = await launchResponse.json();
-          console.log(`✅ ${logPrefix} Launch response:`, launchData);
-          
-          if (!launchData.success) {
-            throw new Error(`Launch failed: ${launchData.error || 'Unknown error'}`);
-          }
-          
-          // Return transaction for signing
-          if (launchData.response?.transaction || launchData.transaction) {
-            const txData = launchData.response?.transaction || launchData.transaction;
-            const transaction = solanaWeb3.Transaction.from(Buffer.from(txData, 'base64'));
-            return transaction;
-          } else {
-            throw new Error('No transaction returned from Bags API');
-          }
-        };
+          })
+        });
         
-        // Try direct API call first
-        try {
-          return await tryBagsAPI(true);
-        } catch (directError) {
-          console.warn('❌ Direct Bags API failed:', directError.message);
-          
-          // Try via proxy
-          try {
-            console.log('🔄 Retrying via CORS proxy...');
-            return await tryBagsAPI(false);
-          } catch (proxyError) {
-            console.warn('❌ Proxy Bags API also failed:', proxyError.message);
-            
-            // Final fallback to manual creation
-            const bagsUrl = `https://bags.fm/create?name=${encodeURIComponent(tokenName)}&symbol=${encodeURIComponent(symbol)}&description=${encodeURIComponent(description)}&image=${encodeURIComponent(imageUri)}`;
-            
-            const userChoice = confirm(`Bags.fm API failed:\n\nDirect: ${directError.message}\nProxy: ${proxyError.message}\n\nWould you like to:\n\n✅ YES - Open Bags.fm to create manually\n❌ NO - Try Pump.fun instead`);
-            
-            if (userChoice) {
-              window.open(bagsUrl, '_blank');
-              throw new Error('Opening Bags.fm for manual token creation. Your data has been pre-filled.');
-            } else {
-              throw new Error('Bags.fm API failed. Please try Pump.fun instead.');
-            }
-          }
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(`Bags SDK API failed: ${errorData.error || response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log('✅ Bags SDK response:', data);
+        
+        if (!data.success) {
+          throw new Error(`Bags SDK failed: ${data.error || 'Unknown error'}`);
+        }
+        
+        // Return transaction for signing
+        if (data.data.transaction) {
+          const transaction = solanaWeb3.Transaction.from(Buffer.from(data.data.transaction, 'base64'));
+          console.log('✅ Transaction created successfully via Bags SDK');
+          return transaction;
+        } else {
+          throw new Error('No transaction returned from Bags SDK');
         }
         
       } catch (error) {
-        console.error('Bags integration error:', error);
-        throw error;
+        console.error('❌ Bags SDK integration error:', error);
+        
+        // Fallback to manual creation if SDK fails
+        const bagsUrl = `https://bags.fm/create?name=${encodeURIComponent(tokenName)}&symbol=${encodeURIComponent(symbol)}&description=${encodeURIComponent(description)}&image=${encodeURIComponent(imageUri)}`;
+        
+        const userChoice = confirm(`Bags.fm SDK failed: ${error.message}\n\nWould you like to:\n\n✅ YES - Open Bags.fm to create manually\n❌ NO - Try Pump.fun instead`);
+        
+        if (userChoice) {
+          window.open(bagsUrl, '_blank');
+          throw new Error('Opening Bags.fm for manual token creation. Your data has been pre-filled.');
+        } else {
+          throw new Error('Bags.fm SDK failed. Please try Pump.fun instead.');
+        }
       }
     }
 
