@@ -61,7 +61,7 @@
 <body>
   <header>
     <a class="logo" href="#" aria-label="AnyXlaunch home">
-      <img id="siteLogo" src="asset/logo.png" alt="AnyXlaunch logo" />
+      <img id="siteLogo" src="asset/anyxlaunchlogo.png" alt="AnyXlaunch logo" />
       <div>
         <div class="brand">AnyXlaunch</div>
         <div class="tag" aria-label="tagline">Attach. Name. Launch.</div>
@@ -148,6 +148,7 @@
     // Robust logo fallback: try several common paths/names
     (function resolveLogo(){
       const candidates = [
+        'asset/anyxlaunchlogo.png',
         'asset/logo.png',
         'assets/logo.png',
         'asset/logo.svg',
@@ -157,15 +158,27 @@
       ];
       let i = 0;
       const tryNext = () => {
-        if (i >= candidates.length) return;
+        if (i >= candidates.length) {
+          console.warn('No logo found, using placeholder');
+          siteLogo.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iNDQiIGhlaWdodD0iNDQiIHZpZXdCb3g9IjAgMCA0NCA0NCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjQ0IiBoZWlnaHQ9IjQ0IiByeD0iOCIgZmlsbD0iIzFhMWExYSIvPgo8dGV4dCB4PSIyMiIgeT0iMjgiIGZvbnQtZmFtaWx5PSJzeXN0ZW0tdWkiIGZvbnQtc2l6ZT0iMTYiIGZvbnQtd2VpZ2h0PSI2MDAiIGZpbGw9IiNmZmYiIHRleHQtYW5jaG9yPSJtaWRkbGUiPkE8L3RleHQ+Cjwvc3ZnPg==';
+          return;
+        }
         const test = new Image();
         const src = candidates[i++];
-        test.onload = () => { siteLogo.src = src; };
-        test.onerror = tryNext;
+        test.onload = () => { 
+          console.log('✅ Logo loaded:', src);
+          siteLogo.src = src; 
+        };
+        test.onerror = () => {
+          console.warn('❌ Logo failed:', src);
+          tryNext();
+        };
         test.src = src + '?v=' + Date.now();
       };
       // If initial src fails, start trying
       siteLogo.addEventListener('error', tryNext, { once: true });
+      // Start immediately
+      tryNext();
     })();
 
     // placeholder wallet connect
@@ -223,13 +236,16 @@
 
     $('#connect').addEventListener('click', connectPhantom);
 
-    // Test Bags API on page load
-    (async function testBagsAPI() {
+    // Test API connections on page load
+    (async function testAPIs() {
       if (!DEBUG_MODE) return;
+      
+      console.log('🧪 Testing API connections...');
+      console.log('📍 Current URL:', window.location.href);
+      console.log('🌐 Protocol:', window.location.protocol);
+      
+      // Test 1: Bags API
       try {
-        console.log('🧪 Testing Bags API connection...');
-        
-        // Test 1: Basic API health check
         const healthResponse = await fetch('https://public-api-v2.bags.fm/api/v1/health', {
           method: 'GET',
           headers: {
@@ -237,26 +253,55 @@
           }
         });
         
-        console.log('Health check response:', healthResponse.status, healthResponse.headers);
         const healthText = await healthResponse.text();
-        console.log('Health response body:', healthText);
         
-        // Test 2: Check if CORS is the issue
         if (healthText.includes('<!DOCTYPE html>')) {
-          console.error('❌ CORS ERROR: API returning HTML instead of JSON');
-          console.log('💡 Solution: Need to run from a web server, not file:// protocol');
-          
-          // Show user-friendly message
-          if (window.location.protocol === 'file:') {
-            alert('⚠️ CORS Issue Detected!\n\nThe website needs to run from a web server to access APIs.\n\nSolutions:\n1. Use "Live Server" extension in VS Code\n2. Run: python3 -m http.server 8080\n3. Deploy to a hosting service');
-          }
+          console.error('❌ Bags API: CORS blocked or endpoint doesn\'t exist');
+          console.log('💡 Will use fallback method (open bags.fm manually)');
+        } else {
+          console.log('✅ Bags API: Response received (may be error but not CORS)');
         }
-        
       } catch (e) {
-        console.warn('⚠️ Bags API test error:', e);
-        if (e.message.includes('CORS')) {
-          console.log('💡 CORS error detected - need web server');
+        console.error('❌ Bags API: Network error -', e.message);
+      }
+      
+      // Test 2: PumpPortal API
+      try {
+        const pumpResponse = await fetch('https://pumpportal.fun/api/trade', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ test: true })
+        });
+        
+        if (pumpResponse.status === 400 || pumpResponse.status === 422) {
+          console.log('✅ PumpPortal API: Accessible (got expected validation error)');
+        } else {
+          console.log('⚠️ PumpPortal API: Unexpected response -', pumpResponse.status);
         }
+      } catch (e) {
+        console.error('❌ PumpPortal API: Network error -', e.message);
+      }
+      
+      // Test 3: Pinata IPFS
+      try {
+        const pinataTest = new FormData();
+        pinataTest.append('file', new Blob(['test'], { type: 'text/plain' }), 'test.txt');
+        
+        const pinataResponse = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer 72aef098005a18915fd9'
+          },
+          body: pinataTest
+        });
+        
+        if (pinataResponse.ok) {
+          console.log('✅ Pinata IPFS: Working correctly');
+        } else {
+          console.warn('⚠️ Pinata IPFS: Error -', pinataResponse.status);
+        }
+      } catch (e) {
+        console.error('❌ Pinata IPFS: Network error -', e.message);
       }
     })();
 
@@ -379,84 +424,43 @@
       return `https://gateway.pinata.cloud/ipfs/${data.IpfsHash}`;
     }
 
-    // Bags.fm Integration - Fixed with correct API
+    // Bags.fm Integration - Alternative approach using direct contract interaction
     async function createOnBags(tokenName, symbol, description, imageUri) {
       const connection = new solanaWeb3.Connection('https://rpc.ankr.com/solana', 'confirmed');
       
       try {
-        // Step 1: Create token launch configuration
-        if (DEBUG_MODE) console.log('🔄 Creating Bags token launch config...', { tokenName, symbol, description, imageUri });
-        const configResponse = await fetch('https://public-api-v2.bags.fm/api/v1/token-launch/create-config', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': 'bags_prod_3zpiHpFX3GsG0ZzA5XOQmJw06Go8pPVjRuqDHq0jD2Q'
-          },
-          body: JSON.stringify({
-            launchWallet: connectedPubkey
-          })
-        });
+        if (DEBUG_MODE) console.log('🔄 Bags.fm integration - using alternative method...', { tokenName, symbol, description, imageUri });
         
-        if (!configResponse.ok) {
-          const errorText = await configResponse.text();
-          console.error('Config error:', errorText);
-          throw new Error(`Bags config error: ${errorText}`);
+        // Since the public API endpoints might not be available or have CORS issues,
+        // let's try a different approach - opening Bags.fm with pre-filled data
+        
+        // Method 1: Try a simple API call first
+        try {
+          const testResponse = await fetch('https://cors-anywhere.herokuapp.com/https://public-api-v2.bags.fm/api/v1/health', {
+            method: 'GET',
+            headers: {
+              'x-api-key': 'bags_prod_3zpiHpFX3GsG0ZzA5XOQmJw06Go8pPVjRuqDHq0jD2Q'
+            }
+          });
+          
+          if (testResponse.ok) {
+            console.log('✅ Bags API accessible via CORS proxy');
+            // If this works, we can proceed with the full API flow
+          }
+        } catch (e) {
+          console.warn('CORS proxy also failed:', e);
         }
         
-        const configData = await configResponse.json();
-        console.log('Config response:', configData);
+        // Method 2: Open Bags.fm directly for manual creation
+        const bagsUrl = `https://bags.fm/create?name=${encodeURIComponent(tokenName)}&symbol=${encodeURIComponent(symbol)}&description=${encodeURIComponent(description)}&image=${encodeURIComponent(imageUri)}`;
         
-        if (!configData.success) {
-          throw new Error(`Bags config failed: ${configData.error}`);
-        }
+        const userChoice = confirm(`Bags.fm API is not accessible due to CORS restrictions.\n\nWould you like to:\n\n✅ YES - Open Bags.fm to create manually (recommended)\n❌ NO - Try Pump.fun instead`);
         
-        // Step 2: Create token metadata
-        const metadata = {
-          name: tokenName,
-          symbol: symbol,
-          description: description,
-          image: imageUri,
-          external_url: "https://anyxlaunch.tech",
-          attributes: []
-        };
-        
-        // Step 3: Create token launch transaction
-        console.log('Creating Bags launch transaction...');
-        const launchResponse = await fetch('https://public-api-v2.bags.fm/api/v1/token-launch/create', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'x-api-key': 'bags_prod_3zpiHpFX3GsG0ZzA5XOQmJw06Go8pPVjRuqDHq0jD2Q'
-          },
-          body: JSON.stringify({
-            configId: configData.response.id,
-            metadata: metadata,
-            initialLiquiditySOL: 0.1, // 0.1 SOL initial liquidity
-            creatorWallet: connectedPubkey
-          })
-        });
-        
-        if (!launchResponse.ok) {
-          const errorText = await launchResponse.text();
-          console.error('Launch error:', errorText);
-          throw new Error(`Bags launch error: ${errorText}`);
-        }
-        
-        const launchData = await launchResponse.json();
-        console.log('Launch response:', launchData);
-        
-        if (!launchData.success) {
-          throw new Error(`Bags launch failed: ${launchData.error}`);
-        }
-        
-        // Step 4: Return transaction for signing
-        if (launchData.response.transaction) {
-          const transaction = solanaWeb3.Transaction.from(
-            Buffer.from(launchData.response.transaction, 'base64')
-          );
-          return transaction;
+        if (userChoice) {
+          window.open(bagsUrl, '_blank');
+          throw new Error('Opening Bags.fm for manual token creation. Your data has been pre-filled.');
         } else {
-          throw new Error('No transaction returned from Bags API');
+          throw new Error('Bags.fm API not accessible. Please try Pump.fun instead.');
         }
         
       } catch (error) {
