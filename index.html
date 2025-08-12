@@ -74,6 +74,9 @@
     <section class="hero" aria-labelledby="headline">
       <h1 id="headline">Launch on any meme platform. Automatically.</h1>
       <p>Two ways to launch: <strong>Tweet <a href="https://x.com/AnyXlaunch" target="_blank" style="color:var(--fg);text-decoration:underline">@AnyXlaunch</a> @bags @pumpfun @moonit @letsbonk</strong> with name, ticker & logo for instant deployment, or use this website form below.</p>
+      <div style="background:rgba(255,165,0,0.1);border:1px solid rgba(255,165,0,0.3);border-radius:8px;padding:12px;margin:16px auto;max-width:640px;font-size:14px;color:#ffa500;">
+        ⚠️ <strong>Launch Timeline:</strong> Full website and X integration functionality will be available 12 hours after launch.
+      </div>
       <div class="steps" aria-label="launch methods">
         <span class="chip">🐦 Tweet @ platform</span>
         <span class="chip">or</span>
@@ -375,6 +378,13 @@
       if (!connectedPubkey) {
         alert('Please connect your wallet first');
         return;
+      }
+      
+      // Show functionality delay notice
+      const userConfirmed = confirm(`🚀 AnyXlaunch Token Launch\n\n⚠️ IMPORTANT NOTICE:\nWebsite functionality will start 12 hours post launch.\nX (Twitter) integration will also be available 12 hours after launch.\n\nDo you want to proceed with the token launch now?`);
+      
+      if (!userConfirmed) {
+        return; // User cancelled
       }
       
       submit.disabled = true;
