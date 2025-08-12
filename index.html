@@ -387,8 +387,19 @@
         const tokenDescription = description.value.trim() || `${tokenName} (${tokenTicker}) launched via AnyXlaunch`;
         const selectedPlatform = platform.value;
         
-        // Upload image to IPFS first
-        const imageUrl = await uploadToIPFS(imageFile);
+        // For Bags, we can pass the image directly or upload to IPFS for other platforms
+        let imageUrl;
+        if (selectedPlatform === 'bags') {
+          // Bags handles image upload internally, so we can pass the image directly or as base64
+          const reader = new FileReader();
+          imageUrl = await new Promise((resolve) => {
+            reader.onload = () => resolve(reader.result);
+            reader.readAsDataURL(imageFile);
+          });
+        } else {
+          // For other platforms, upload to IPFS
+          imageUrl = await uploadToIPFS(imageFile);
+        }
         
         // Create token based on platform
         let transaction;

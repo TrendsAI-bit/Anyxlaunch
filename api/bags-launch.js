@@ -1,6 +1,4 @@
-// Vercel serverless function for Bags.fm token launching using official SDK
-import { BagsSDK } from '@bagsfm/bags-sdk';
-
+// Vercel serverless function for Bags.fm token launching using direct API calls
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -25,58 +23,87 @@ export default async function handler(req, res) {
       });
     }
 
-    console.log('🚀 Creating Bags token with official SDK:', { tokenName, symbol, creatorWallet });
+    console.log('🚀 Creating Bags token via API:', { tokenName, symbol, creatorWallet });
 
-    // Initialize Bags SDK
-    const bags = new BagsSDK({
-      apiKey: 'bags_prod_3zpiHpFX3GsG0ZzA5XOQmJw06Go8pPVjRuqDHq0jD2Q',
-      rpcUrl: 'https://mainnet.helius-rpc.com/?api-key=bc40e3e4-98df-4d4f-99cf-dd22cc091955',
-      environment: 'production' // or 'development' for testnet
+    const apiKey = 'bags_prod_3zpiHpFX3GsG0ZzA5XOQmJw06Go8pPVjRuqDHq0jD2Q';
+    const apiBase = 'https://public-api-v2.bags.fm/api/v1';
+
+    // Step 1: Create token launch configuration
+    console.log('📡 Step 1: Creating launch config...');
+    const configResponse = await fetch(`${apiBase}/token-launch/create-config`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey
+      },
+      body: JSON.stringify({
+        launchWallet: creatorWallet
+      })
     });
 
-    // Create token metadata
+    if (!configResponse.ok) {
+      const errorText = await configResponse.text();
+      console.error('Config API error:', errorText);
+      throw new Error(`Config API failed: ${configResponse.status} - ${errorText}`);
+    }
+
+    const configData = await configResponse.json();
+    console.log('✅ Config created:', configData);
+
+    if (!configData.success) {
+      throw new Error(`Config failed: ${configData.error || 'Unknown error'}`);
+    }
+
+    // Step 2: Create token metadata (Bags handles image upload internally if needed)
     const metadata = {
       name: tokenName,
       symbol: symbol,
       description: description || `${tokenName} (${symbol}) launched via AnyXlaunch`,
-      image: imageUri || 'https://via.placeholder.com/512x512/000000/FFFFFF?text=' + encodeURIComponent(symbol),
+      image: imageUri, // Bags will handle this
       external_url: 'https://anyxlaunch.vercel.app',
       attributes: [
         {
           trait_type: 'Platform',
           value: 'AnyXlaunch'
-        },
-        {
-          trait_type: 'Launch Method',
-          value: 'Web Interface'
         }
       ]
     };
 
-    // Create token launch configuration
-    const launchConfig = await bags.createTokenLaunchConfig({
-      creatorWallet: creatorWallet,
-      metadata: metadata,
-      initialLiquiditySOL: 0.1, // 0.1 SOL initial liquidity
-      // Add other configuration options as needed
+    // Step 3: Create the launch transaction
+    console.log('📡 Step 2: Creating launch transaction...');
+    const launchResponse = await fetch(`${apiBase}/token-launch/create`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey
+      },
+      body: JSON.stringify({
+        configId: configData.response?.id || configData.id,
+        metadata: metadata,
+        initialLiquiditySOL: 0.1,
+        creatorWallet: creatorWallet
+      })
     });
 
-    console.log('✅ Launch config created:', launchConfig);
+    if (!launchResponse.ok) {
+      const errorText = await launchResponse.text();
+      console.error('Launch API error:', errorText);
+      throw new Error(`Launch API failed: ${launchResponse.status} - ${errorText}`);
+    }
 
-    // Generate the launch transaction
-    const launchTransaction = await bags.createLaunchTransaction({
-      configId: launchConfig.id,
-      creatorWallet: creatorWallet
-    });
+    const launchData = await launchResponse.json();
+    console.log('✅ Launch transaction created:', launchData);
 
-    console.log('✅ Launch transaction created');
+    if (!launchData.success) {
+      throw new Error(`Launch failed: ${launchData.error || 'Unknown error'}`);
+    }
 
     // Return the transaction for client-side signing
     res.status(200).json({
       success: true,
       data: {
-        configId: launchConfig.id,
-        transaction: launchTransaction.transaction, // Base64 encoded transaction
+        configId: configData.response?.id || configData.id,
+        transaction: launchData.response?.transaction || launchData.transaction,
         message: 'Token launch transaction prepared successfully',
         metadata: metadata
       }
@@ -89,8 +116,8 @@ export default async function handler(req, res) {
     res.status(500).json({
       success: false,
       error: error.message || 'Failed to create token launch',
-      details: error.response?.data || error.stack,
-      code: error.code || 'BAGS_SDK_ERROR'
+      details: error.stack,
+      code: 'BAGS_API_ERROR'
     });
   }
 }
