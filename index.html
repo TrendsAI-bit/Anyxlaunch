@@ -131,7 +131,7 @@
         <div class="actions">
           <button id="connect" type="button">Connect Phantom</button>
           <button id="previewBtn" class="ghost" type="button">Preview</button>
-          <button id="submit" type="button" disabled>Prepare Fair Launch</button>
+          <button id="submit" type="button" disabled>Coming Live Soon</button>
         </div>
 
         <div id="preview" class="preview" aria-live="polite">
@@ -158,24 +158,24 @@
     <div class="modal-content">
       <span class="close" id="closeModal">&times;</span>
       <div class="modal-header">
-        <h2 class="modal-title">🚀 AnyXlaunch Going Live</h2>
+        <h2 class="modal-title">AnyXlaunch Going Live</h2>
         <p class="modal-subtitle">Full functionality countdown</p>
       </div>
       <div class="modal-body">
         <p style="color:var(--muted);margin-bottom:20px;">
-          Your token will launch immediately, but full website and X integration features will be available in:
+          AnyXlaunch platform will be fully operational in:
         </p>
         <div class="countdown-container">
           <div class="countdown-timer" id="countdownTimer">12:00:00</div>
           <div class="countdown-label">Hours : Minutes : Seconds</div>
         </div>
         <p style="color:var(--muted);font-size:14px;margin-top:16px;">
-          ⚠️ <strong>Important:</strong> Token creation will work now, but tweet-to-launch and advanced features activate after the countdown.
+          <strong>Important:</strong> Both token creation via this website and tweet-to-launch functionality will only be available after the countdown completes.
         </p>
       </div>
       <div class="modal-actions">
         <button class="modal-btn secondary" id="cancelLaunch">Cancel</button>
-        <button class="modal-btn primary" id="confirmLaunch">Proceed with Launch</button>
+        <button class="modal-btn primary" id="confirmLaunch">Understood</button>
       </div>
     </div>
   </div>
@@ -427,7 +427,10 @@
     function valid(){
       return name.value.trim().length >= 2 && ticker.value.trim().length >= 2 && platform.value && img.files.length === 1;
     }
-    function updateState(){ submit.disabled = !valid(); }
+    function updateState(){ 
+      // Keep button disabled since platform launches in 12 hours
+      submit.disabled = true; 
+    }
     ['change','input'].forEach(evt=>{
       img.addEventListener(evt, updateState);
       name.addEventListener(evt, updateState);
@@ -533,8 +536,8 @@
         
         alert(errorMessage);
       } finally {
-        submit.disabled = false;
-        submit.textContent = 'Prepare Fair Launch';
+        submit.disabled = true;
+        submit.textContent = 'Coming Live Soon';
       }
     }
 
@@ -590,8 +593,7 @@
     cancelLaunch.addEventListener('click', hideLaunchModal);
     
     confirmLaunch.addEventListener('click', () => {
-      hideLaunchModal();
-      executeLaunch(); // Start the actual launch process
+      hideLaunchModal(); // Just close the modal since launch isn't available yet
     });
     
     // Close modal when clicking outside
