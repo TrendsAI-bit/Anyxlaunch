@@ -56,6 +56,25 @@
     @media (max-width:720px){ .hero h1{font-size:32px} .row{grid-template-columns:1fr} }
     .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
     .wallet-info{margin-left:auto; font-size:13px; color:var(--muted)}
+    
+    /* Modal styles */
+    .modal{display:none;position:fixed;z-index:1000;left:0;top:0;width:100%;height:100%;background:rgba(0,0,0,0.8);backdrop-filter:blur(4px)}
+    .modal-content{background:var(--bg);margin:5% auto;padding:30px;border:1px solid var(--line);border-radius:16px;width:90%;max-width:500px;position:relative;animation:modalSlide 0.3s ease-out}
+    .modal-header{text-align:center;margin-bottom:24px}
+    .modal-title{font-size:24px;font-weight:600;color:var(--fg);margin:0 0 8px}
+    .modal-subtitle{color:var(--muted);font-size:16px;margin:0}
+    .modal-body{text-align:center;margin-bottom:30px}
+    .countdown-container{background:rgba(255,165,0,0.1);border:2px solid rgba(255,165,0,0.3);border-radius:12px;padding:20px;margin:20px 0}
+    .countdown-timer{font-size:32px;font-weight:600;color:#ffa500;margin:10px 0;font-family:monospace}
+    .countdown-label{color:var(--muted);font-size:14px}
+    .modal-actions{display:flex;gap:12px;justify-content:center}
+    .modal-btn{padding:12px 24px;border-radius:10px;border:0;font-weight:600;cursor:pointer;font-size:16px}
+    .modal-btn.primary{background:#fff;color:#000}
+    .modal-btn.secondary{background:transparent;color:var(--fg);border:1px solid var(--line)}
+    .modal-btn:hover{opacity:0.8}
+    .close{position:absolute;top:15px;right:20px;color:var(--muted);font-size:28px;font-weight:bold;cursor:pointer}
+    .close:hover{color:var(--fg)}
+    @keyframes modalSlide{from{opacity:0;transform:translateY(-50px)}to{opacity:1;transform:translateY(0)}}
   </style>
 </head>
 <body>
@@ -133,6 +152,33 @@
     <span>© <span id="year"></span> AnyXlaunch</span>
     <span>Powered by Solana</span>
   </footer>
+
+  <!-- Launch Timer Modal -->
+  <div id="launchModal" class="modal">
+    <div class="modal-content">
+      <span class="close" id="closeModal">&times;</span>
+      <div class="modal-header">
+        <h2 class="modal-title">🚀 AnyXlaunch Going Live</h2>
+        <p class="modal-subtitle">Full functionality countdown</p>
+      </div>
+      <div class="modal-body">
+        <p style="color:var(--muted);margin-bottom:20px;">
+          Your token will launch immediately, but full website and X integration features will be available in:
+        </p>
+        <div class="countdown-container">
+          <div class="countdown-timer" id="countdownTimer">12:00:00</div>
+          <div class="countdown-label">Hours : Minutes : Seconds</div>
+        </div>
+        <p style="color:var(--muted);font-size:14px;margin-top:16px;">
+          ⚠️ <strong>Important:</strong> Token creation will work now, but tweet-to-launch and advanced features activate after the countdown.
+        </p>
+      </div>
+      <div class="modal-actions">
+        <button class="modal-btn secondary" id="cancelLaunch">Cancel</button>
+        <button class="modal-btn primary" id="confirmLaunch">Proceed with Launch</button>
+      </div>
+    </div>
+  </div>
 
   <script src="https://unpkg.com/@solana/web3.js@1.95.3/lib/index.iife.min.js"></script>
   <script src="https://unpkg.com/bs58@5.0.0/index.js"></script>
@@ -408,13 +454,12 @@
         return;
       }
       
-      // Show functionality delay notice
-      const userConfirmed = confirm(`🚀 AnyXlaunch Token Launch\n\n⚠️ IMPORTANT NOTICE:\nWebsite functionality will start 12 hours post launch.\nX (Twitter) integration will also be available 12 hours after launch.\n\nDo you want to proceed with the token launch now?`);
-      
-      if (!userConfirmed) {
-        return; // User cancelled
-      }
-      
+      // Show countdown modal instead of simple confirm
+      showLaunchModal();
+    });
+
+    // Actual launch function (called after modal confirmation)
+    async function executeLaunch() {
       submit.disabled = true;
       submit.textContent = 'Preparing Launch...';
       
@@ -490,6 +535,69 @@
       } finally {
         submit.disabled = false;
         submit.textContent = 'Prepare Fair Launch';
+      }
+    }
+
+    // Modal functionality
+    const modal = $('#launchModal');
+    const closeModal = $('#closeModal');
+    const cancelLaunch = $('#cancelLaunch');
+    const confirmLaunch = $('#confirmLaunch');
+    const countdownTimer = $('#countdownTimer');
+    
+    let countdownInterval = null;
+    
+    function showLaunchModal() {
+      modal.style.display = 'block';
+      startCountdown();
+    }
+    
+    function hideLaunchModal() {
+      modal.style.display = 'none';
+      if (countdownInterval) {
+        clearInterval(countdownInterval);
+        countdownInterval = null;
+      }
+    }
+    
+    function startCountdown() {
+      // Set target time to 12 hours from now
+      const targetTime = new Date().getTime() + (12 * 60 * 60 * 1000); // 12 hours in milliseconds
+      
+      function updateCountdown() {
+        const now = new Date().getTime();
+        const timeLeft = targetTime - now;
+        
+        if (timeLeft <= 0) {
+          countdownTimer.textContent = '00:00:00';
+          clearInterval(countdownInterval);
+          return;
+        }
+        
+        const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+        const minutes = Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60));
+        const seconds = Math.floor((timeLeft % (1000 * 60)) / 1000);
+        
+        countdownTimer.textContent = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+      }
+      
+      updateCountdown(); // Update immediately
+      countdownInterval = setInterval(updateCountdown, 1000); // Update every second
+    }
+    
+    // Modal event listeners
+    closeModal.addEventListener('click', hideLaunchModal);
+    cancelLaunch.addEventListener('click', hideLaunchModal);
+    
+    confirmLaunch.addEventListener('click', () => {
+      hideLaunchModal();
+      executeLaunch(); // Start the actual launch process
+    });
+    
+    // Close modal when clicking outside
+    modal.addEventListener('click', (e) => {
+      if (e.target === modal) {
+        hideLaunchModal();
       }
     });
 
